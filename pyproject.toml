@@ -1,7 +1,7 @@
 [project]
-name = "overset"
-version = "0.1.0"
-description = "Add your description here"
+name = "pyoverset"
+version = "2.0.0"
+description = "Proof Of Concept on full domain reconstruction of 2 or more subdomains solutions of helmoz type pde equations."
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [

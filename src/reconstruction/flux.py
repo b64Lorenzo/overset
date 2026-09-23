@@ -59,6 +59,8 @@ class FluxCorrectionResult:
 
     residual_after_flux: float
 
+    matrix: np.ndarray = None
+
 
 # ==========================================================
 # CORRECTOR
@@ -132,7 +134,7 @@ class FluxInterfaceCorrector:
 
             before_flux += np.linalg.norm(Jq)
 
-            amps_minus, amps_plus = (
+            amps_minus, amps_plus, M = (
                 FluxInterfaceCorrector
                 ._fit_interface_modes(
                     Ju,
@@ -249,6 +251,8 @@ class FluxInterfaceCorrector:
 
             residual_after_flux=
             after_flux,
+
+            matrix=M
         )
 
     # ======================================================
@@ -715,4 +719,5 @@ class FluxInterfaceCorrector:
         return (
             amps_minus,
             amps_plus,
+            M
         )

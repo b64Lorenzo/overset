@@ -20,29 +20,14 @@ import matplotlib.pyplot as plt
 from skfem import MeshLine, Basis, ElementLineP1
 from skfem import BilinearForm, LinearForm, asm, condense, solve
 from skfem.helpers import dot, grad
+from src.utils.logger import Logger
 
 plt.rcParams.update({'font.size':14,'axes.titlesize':18,'axes.labelsize':16})
 
-stamp=datetime.now().strftime('%Y%m%d_%H%M%S')
-run_dir=Path('runs')/f'variable_interface_{stamp}'
-run_dir.mkdir(parents=True,exist_ok=True)
+log_mgr = Logger()
 
-DEBUG_MODE = True
-
-logger = logging.getLogger("validation")
-logger.setLevel(logging.DEBUG if DEBUG_MODE else logging.INFO)
-
-file_handler = logging.FileHandler(run_dir / "run.log")
-file_handler.setFormatter(
-    logging.Formatter(
-        '%(asctime)s | %(levelname)s | %(message)s'
-    )
-)
-
-logger.addHandler(file_handler)
-
-# Prevent messages from propagating to the root logger
-logger.propagate = False
+logger = log_mgr.get_logger()
+run_dir = log_mgr.get_run_dir()
 
 # -------------------------------------------------
 # USER PARAMETERS
@@ -106,13 +91,13 @@ def forcing_term(x):
 
 
 def left_bc(x):
-    return 1.5*np.sin(0.1*x)
-    #return 0
+    #return 1.5*np.sin(0.1*x)
+    return 0
 
 
 def right_bc(x):
-    return 1.5*np.sin(0.1*x)
-    #return 0
+    #return 1.5*np.sin(0.1*x)
+    return 0
 
 
 @BilinearForm
@@ -130,19 +115,14 @@ def rhs(v,w):
     return forcing_term(w.x[0]) * v
 
 
-def solve_domain(a,b,n,bc_left,bc_right,homogeneous=False):
-    
-    logger.debug(
-            "solve_domain(a=%s, b=%s, n=%s, bc_left=%s, bc_right=%s, homogeneous=%s)",
-            a, b, n, bc_left, bc_right, homogeneous
-        )
 
+def solve_domain(a,b,n,bc_left,bc_right,homogeneous=False):
     mesh=MeshLine(np.linspace(a,b,n+1))
     basis=Basis(mesh,ElementLineP1())
 
     A=asm(diffusion,basis)+asm(reaction,basis)
     bvec=np.zeros(basis.N) if homogeneous else asm(rhs,basis)
-    
+
     dL=basis.get_dofs(lambda x: np.isclose(x[0],a))
     dR=basis.get_dofs(lambda x: np.isclose(x[0],b))
 
@@ -154,14 +134,6 @@ def solve_domain(a,b,n,bc_left,bc_right,homogeneous=False):
 
     AII,bI,xIvec,I=condense(A,bvec,D=D,x=xbc)
     u=xIvec.copy(); u[I]=solve(AII,bI)
-    
-    
-    logger.debug(
-            "solve_domain finished: u.min=%e u.max=%e",
-            np.min(u),
-            np.max(u)
-        )
-
     return mesh.p[0],u
 
 
@@ -174,143 +146,244 @@ def pde_balance(x,u):
     rhsv=forcing_term(x)
     return lhs,rhsv,lhs-rhsv
 
-if logger.isEnabledFor(logging.DEBUG):
-    logger.debug("========== RUN PARAMETERS ==========")
-
-    params = {
-        "Lx": Lx,
-        "xI": xI,
-        "n_full": n_full,
-        "n_left": n_left,
-        "n_right": n_right,
-        "k_reaction": k_reaction,
-        "relax": relax,
-        "noise_amplitude": noise_amplitude,
-        "F0": F0,
-        "P0": P0,
-        "P_amp": P_amp,
-        "k_p": k_p,
-        "A_f": A_f,
-        "k_f": k_f,
-        "omega": omega,
-        "current_time": current_time,
-    }
-
-    for k, v in params.items():
-        logger.debug("%s = %s", k, v)
-
-    logger.debug("====================================")
-
 # BENCHMARK
 x_full,u_full=solve_domain(0,Lx,n_full,left_bc(0),right_bc(Lx))
 ui_exact=np.interp(xI,x_full,u_full)
 ul_guess=ui_exact + noise_amplitude*rng.standard_normal()
 ur_guess=ui_exact + noise_amplitude*rng.standard_normal()
 
-
 # SUBDOMAINS
 xL,uL=solve_domain(0,xI,n_left,left_bc(0),ul_guess)
 xR,uR=solve_domain(xI,Lx,n_right,ur_guess,right_bc(Lx))
+# ============================================================
+# INTERFACE CORRECTION
+# ============================================================
 
-# characteristic equation
-x0Loc = -3
-x1Loc = 2
-x0 = xL[x0Loc]
-x1 = xR[x1Loc]
+uLI = uL[-1]
+uRI = uR[0]
 
-Fp = F_prime(x0)
-Fv = F_func(x0)
-alpha1, alpha2 = np.roots([
-    Fv,
-    Fp,
-    -k_reaction
-])
-Fp = F_prime(x1)
-Fv = F_func(x1)
-# Right characteristic roots
-beta1, beta2 = np.roots([
-    -Fv,
-    Fp,
-    k_reaction
-])
-alpha = alpha1 if np.real(alpha1) > np.real(alpha2) else alpha2
-beta  = beta1  if np.real(beta1)  > np.real(beta2)  else beta2
+Ju = uLI - uRI
 
-logger.debug(f"alpha = {alpha:.6e}")
-logger.debug(f"beta  = {beta:.6e}")
+dxL = xL[-1] - xL[-2]
+dxR = xR[1] - xR[0]
 
+duLI = (
+    3.0*uL[-1]
+    - 4.0*uL[-2]
+    + uL[-3]
+) / (2.0*dxL)
 
-# exponentials referenced to the interface
+duRI = (
+    -3.0*uR[0]
+    + 4.0*uR[1]
+    - uR[2]
+) / (2.0*dxR)
 
-a0 = np.exp(alpha * x0)
-a1 = np.exp(alpha * x1)
+Fv = F_func(xI)
 
-b0 = np.exp(-beta *x0)
-b1 = np.exp(-beta * x1)
+fluxL = Fv * duLI
+fluxR = Fv * duRI
 
-uR1_old = u_full[n_left + x1Loc] 
-uL0_old = u_full[n_left + x0Loc]
+Jflux = fluxL - fluxR
+
+# ------------------------------------------------------------
+# HOMOGENEOUS UNIT RESPONSES
+# phiL(xI)=1, phiR(xI)=1
+# ------------------------------------------------------------
+
+_, phiL = solve_domain(
+    0.0,
+    xI,
+    n_left,
+    0.0,
+    1.0,
+    homogeneous=True
+)
+
+_, phiR = solve_domain(
+    xI,
+    Lx,
+    n_right,
+    1.0,
+    0.0,
+    homogeneous=True
+)
+
+# ------------------------------------------------------------
+# FLUX RESPONSE OF BASIS FUNCTIONS
+# ------------------------------------------------------------
+
+qphiL = Fv * (
+    3.0*phiL[-1]
+    - 4.0*phiL[-2]
+    + phiL[-3]
+) / (2.0*dxL)
+
+qphiR = Fv * (
+    -3.0*phiR[0]
+    + 4.0*phiR[1]
+    - phiR[2]
+) / (2.0*dxR)
+
+# ------------------------------------------------------------
+# SOLVE FOR TWO AMPLITUDES
+#
+# Enforces:
+#   uLc(xI) = uRc(xI)
+#   fluxLc(xI) = fluxRc(xI)
+# ------------------------------------------------------------
 
 A = np.array([
-    [1,0,0,b0],
-    [0,1,a1,0],
-    [0,0,a0,0],
-    [0,0,0,b1]
+    [1.0,    -1.0],
+    [qphiL, -qphiR]
 ])
 
 rhs = np.array([
-    uL0_old,
-    uR1_old,
-    uL[x0Loc] - uL0_old,
-    uR[x1Loc] - uR1_old
+    Ju,
+    Jflux
 ])
-u1, u2, a, b = np.linalg.solve(A, rhs)
 
-# interface-centered homogeneous corrections
+epsL, epsR = np.linalg.solve(A, rhs)
 
+condA = np.linalg.cond(A)
 
-eL = a*np.exp(alpha*xL)
-eR = b*np.exp(-beta*xR)
+logger.info(
+    "Cond(A)=%.6e",
+    condA
+)
+
+# ------------------------------------------------------------
+# CORRECTION FIELDS
+# ------------------------------------------------------------
+
+eL = epsL * phiL
+eR = epsR * phiR
 
 uLc = uL - eL
 uRc = uR - eR
 
+
+# ============================================================
+# TRUE HOMOGENEOUS CORRECTIONS
+# ============================================================
+
+u_exact_left = np.interp(xL, x_full, u_full)
+u_exact_right = np.interp(xR, x_full, u_full)
+
+true_homogeneous_left = uL - u_exact_left
+true_homogeneous_right = uR - u_exact_right
+
+reconstructed_homogeneous_left = eL
+reconstructed_homogeneous_right = eR
+
+left_h_error = np.linalg.norm(
+    true_homogeneous_left
+    - reconstructed_homogeneous_left
+)
+
+right_h_error = np.linalg.norm(
+    true_homogeneous_right
+    - reconstructed_homogeneous_right
+)
+
+fig, (ax1, ax2) = plt.subplots(
+    2,
+    1,
+    figsize=(13,10)
+)
+
+ax1.plot(
+    xL,
+    true_homogeneous_left,
+    lw=3,
+    label='True correction'
+)
+
+ax1.plot(
+    xL,
+    reconstructed_homogeneous_left,
+    '--',
+    lw=3,
+    label='Reconstructed correction'
+)
+
+ax1.text(
+    0.02,
+    0.95,
+    f"L2={left_h_error:.3e}",
+    transform=ax1.transAxes,
+    va='top'
+)
+
+ax1.grid(True)
+ax1.legend()
+ax1.set_title(
+    "West Homogeneous Correction"
+)
+
+ax2.plot(
+    xR,
+    true_homogeneous_right,
+    lw=3,
+    label='True correction'
+)
+
+ax2.plot(
+    xR,
+    reconstructed_homogeneous_right,
+    '--',
+    lw=3,
+    label='Reconstructed correction'
+)
+
+ax2.text(
+    0.02,
+    0.95,
+    f"L2={right_h_error:.3e}",
+    transform=ax2.transAxes,
+    va='top'
+)
+
+ax2.grid(True)
+ax2.legend()
+ax2.set_title(
+    "East Homogeneous Correction"
+)
+
+plt.tight_layout()
+
+plt.savefig(
+    run_dir /
+    "homogeneous_correction_flux.png",
+    dpi=600
+)
+
+# ------------------------------------------------------------
+# DIAGNOSTICS
+# ------------------------------------------------------------
+
+fluxLc = Fv * (
+    3.0*uLc[-1]
+    - 4.0*uLc[-2]
+    + uLc[-3]
+) / (2.0*dxL)
+
+fluxRc = Fv * (
+    -3.0*uRc[0]
+    + 4.0*uRc[1]
+    - uRc[2]
+) / (2.0*dxR)
+
+print("Ju before    =", Ju)
+print("Jflux before =", Jflux)
+
+print("Ju after     =", uLc[-1] - uRc[0])
+print("Jflux after  =", fluxLc - fluxRc)
+print("epsL         =", epsL)
+print("epsR         =", epsR)
 uLh = uL - u_full[:n_left+1]
 uRh = uR - u_full[n_left:]
 
-from scipy.optimize import curve_fit
-
-def left_model(x, A, alpha):
-    return A*np.exp(alpha*(x-xI))
-
-popt, _ = curve_fit(
-    left_model,
-    xL,
-    uLh,
-    p0=(uLh[-1], 0.9)
-)
-
-A_fit, alpha_fit = popt
-
-logger.debug(f"alpha_fit = {alpha_fit:.6e}")
-logger.debug(f"a_fit = {A_fit:.6e}")
-logger.debug(f"a = {a:.6e}")
-
-def right_model(x, A, alpha):
-    return A*np.exp(-alpha*(x-xI))
-
-popt, _ = curve_fit(
-    right_model,
-    xL,
-    uLh,
-    p0=(uLh[-1], 0.9)
-)
-
-B_fit, beta_fit = popt
-
-logger.debug(f"beta_fit = {beta_fit:.6e}")
-logger.debug(f"b_fit = {B_fit:.6e}")
-logger.debug(f"b = {b:.6e}")
 
 
 u_unc=np.zeros_like(u_full)
@@ -320,6 +393,11 @@ u_unc[mask]=np.interp(x_full[mask],xL,uL)
 u_unc[~mask]=np.interp(x_full[~mask],xR,uR)
 u_rec[mask]=np.interp(x_full[mask],xL,uLc)
 u_rec[~mask]=np.interp(x_full[~mask],xR,uRc)
+
+err_before=np.linalg.norm(u_unc-u_full)
+err_after=np.linalg.norm(u_rec-u_full)
+
+lhsf,rhsf,resf=pde_balance(x_full,u_full)
 
 err_before=np.linalg.norm(u_unc-u_full)
 err_after=np.linalg.norm(u_rec-u_full)
@@ -419,7 +497,7 @@ ax1.set_title(
 plt.tight_layout()
 
 plt.savefig(
-    run_dir / 'solution_with_error.png',
+    run_dir / 'solution_with_error_flux.png',
     dpi=600,
     bbox_inches='tight'
 )
@@ -503,15 +581,157 @@ ax2.legend()
 plt.tight_layout()
 
 plt.savefig(
-    run_dir / 'exponential_fit_comparison.png',
+    run_dir / 'exponential_fit_comparison_flux.png',
     dpi=600,
     bbox_inches='tight'
 )
 
 plt.close(fig)
 
-pd.DataFrame({'x':x_full,'u_full':u_full,'u_reconstructed':u_rec}).to_csv(run_dir/'results.csv',index=False)
+Ju_before = Ju
+Jq_before = Jflux
 
+Ju_after = uLc[-1] - uRc[0]
+
+Jq_after = (
+    fluxLc
+    -
+    fluxRc
+)
+
+fig, ax = plt.subplots(
+    figsize=(8,6)
+)
+
+labels = [
+    "Solution jump",
+    "Flux jump"
+]
+
+before = [
+    abs(Ju_before),
+    abs(Jq_before)
+]
+
+after = [
+    abs(Ju_after),
+    abs(Jq_after)
+]
+
+x = np.arange(len(labels))
+
+ax.bar(
+    x-0.2,
+    before,
+    width=0.4,
+    label="Before"
+)
+
+ax.bar(
+    x+0.2,
+    after,
+    width=0.4,
+    label="After"
+)
+
+ax.set_yscale("log")
+
+ax.set_xticks(x)
+ax.set_xticklabels(labels)
+
+ax.grid(True)
+
+ax.legend()
+
+plt.tight_layout()
+
+plt.savefig(
+    run_dir /
+    "jump_reduction.png",
+    dpi=600
+)
+
+residual_solution = (
+    uLc[-1]
+    -
+    uRc[0]
+)
+
+residual_flux = (
+    fluxLc
+    -
+    fluxRc
+)
+
+logger.info(
+    "Interface residual solution = %.6e",
+    residual_solution
+)
+
+logger.info(
+    "Interface residual flux = %.6e",
+    residual_flux
+)
+
+xI_values = np.linspace(
+    5,
+    95,
+    500
+)
+
+cond_values = []
+
+lam = np.sqrt(
+    k_reaction / F0
+)
+
+for xI_test in xI_values:
+
+    LW = xI_test
+    LE = Lx - xI_test
+
+    qW = (
+        F0
+        * lam
+        / np.tanh(lam*LW)
+    )
+
+    qE = (
+        -F0
+        * lam
+        / np.tanh(lam*LE)
+    )
+
+    Atest = np.array([
+        [1,-1],
+        [qW,-qE]
+    ])
+
+    cond_values.append(
+        np.linalg.cond(Atest)
+    )
+
+plt.figure(figsize=(12,6))
+
+plt.plot(
+    xI_values,
+    cond_values,
+    lw=3
+)
+
+plt.yscale("log")
+
+plt.xlabel("Interface location")
+
+plt.ylabel("Condition number")
+
+plt.grid(True)
+
+plt.savefig(
+    run_dir /
+    "conditioning_analysis.png",
+    dpi=600
+)
 
 logger.info("L2 error before correction = %.12e", err_before)
 logger.info("L2 error after correction  = %.12e", err_after)
