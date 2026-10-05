@@ -81,7 +81,10 @@ plt.rcParams.update(
 # LOGGER
 # ==========================================================
 
-log_mgr = Logger()
+log_mgr = Logger(
+    name="overlap2d_4dom",
+    run_prefix="overlap2d_4dom",
+)
 
 logger = log_mgr.get_logger()
 run_dir = log_mgr.get_run_dir()

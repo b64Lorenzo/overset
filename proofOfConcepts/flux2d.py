@@ -61,7 +61,11 @@ plt.rcParams.update(
     }
 )
 
-log_mgr = Logger()
+
+log_mgr = Logger(
+    name="flux2d",
+    run_prefix="flux2d",
+)
 
 logger = log_mgr.get_logger()
 
@@ -357,7 +361,7 @@ domainW = DomainSolution2D(
         Ly,
         F,
         k_reaction,
-        interfaces=("r",),
+        interfaces=("e",),
         n_modes=n_modes,
     ),
 
@@ -386,7 +390,7 @@ domainE = DomainSolution2D(
         Ly,
         F,
         k_reaction,
-        interfaces=("l",),
+        interfaces=("w",),
         n_modes=n_modes,
     ),
 

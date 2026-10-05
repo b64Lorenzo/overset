@@ -1,23 +1,172 @@
-# Overset Grid Interface Reconstruction – Proof of Concept
+# Overset Grid Interface Reconstruction
 
-This repository contains a collection of one-dimensional proof-of-concept implementations for studying interface-error reconstruction in overset/domain-decomposed PDE problems.
+Numerical proof-of-concept repository accompanying the MSc research work
 
-The main idea is that errors introduced by artificial interface conditions can be interpreted as missing homogeneous solutions of the governing operator and subsequently reconstructed.
+> **Reconstruction Techniques for Elliptic Problems on Overlapping and Disjoint Domains**
+>
+> Lorenzo Zambelli  
+> MSc Thesis / Research Report  
+> University of Groningen
 
-Two reconstruction strategies are included:
+---
 
-1. **Solution-Based Reconstruction**
-   - Uses local observations away from the interface.
-   - Reconstructs homogeneous modes explicitly.
-   - Supports:
-     - Single-mode reconstruction.
-     - Multiple independent modes.
-     - Multiple modes with a single amplitude.
+# Overview
 
-2. **Flux-Based Reconstruction**
-   - Uses interface solution and flux jumps.
-   - Solves a small 2×2 reconstruction system.
-   - Does not require observation points.
+This repository contains the numerical proof-of-concept implementations developed during the research work on reconstruction techniques for elliptic problems solved on overlapping and disjoint computational domains.
+
+The objective of the work is to investigate how the error introduced by artificial domain decomposition can be interpreted as a homogeneous solution of the governing elliptic operator and subsequently reconstructed.
+
+The repository contains:
+
+- One-dimensional overlap reconstruction;
+- Two-dimensional overlap reconstruction;
+- Four-domain overlap reconstruction;
+- One-dimensional interface-flux reconstruction;
+- Two-dimensional interface-flux reconstruction;
+- Finite-element validation studies;
+- Mesh-convergence studies;
+- Modal-convergence studies;
+- Conditioning studies;
+- Overlap-width sensitivity studies.
+
+The code was developed as a research code accompanying the thesis and associated numerical experiments rather than as a general-purpose software package.
+
+---
+
+# Scientific Background
+
+The principal elliptic model considered throughout the repository is
+
+```math
+k u
+-
+\nabla \cdot
+\left(
+h \nabla u
+\right)
+=
+\nabla \cdot
+\left(
+p \nabla f
+\right).
+```
+
+In one dimension the problem becomes
+
+```math
+k u
+-
+\frac{d}{dx}
+\left(
+h \frac{du}{dx}
+\right)
+=
+\frac{d}{dx}
+\left(
+p \frac{df}{dx}
+\right).
+```
+
+The solution is viewed as
+
+```math
+u
+=
+u_p
++
+u_h,
+```
+
+where
+
+```math
+u_p
+```
+
+is the particular solution and
+
+```math
+u_h
+```
+
+is the homogeneous contribution introduced by artificial interface conditions.
+
+The reconstruction procedures implemented in this repository attempt to identify and remove this homogeneous component.
+
+---
+
+# Reconstruction Methodologies
+
+Two families of reconstruction methods are implemented.
+
+---
+
+## 1. Overlap Reconstruction
+
+The overlap reconstruction methodology exploits observations inside an overlap region shared by neighboring subdomains.
+
+General workflow:
+
+1. Compute a benchmark solution on the undecomposed domain.
+2. Solve independent subdomain problems.
+3. Extract observations inside the overlap region.
+4. Assemble a reconstruction system.
+5. Estimate homogeneous amplitudes.
+6. Reconstruct the homogeneous correction.
+7. Remove the correction from the local solutions.
+8. Blend corrected subdomain solutions.
+9. Compare against the benchmark solution.
+
+Implemented in:
+
+```text
+overlapping1d.py
+overlapping2d.py
+overlapping2d_4dom.py
+```
+
+---
+
+## 2. Flux Reconstruction
+
+The flux reconstruction methodology does not require overlap observations.
+
+Instead, reconstruction is performed directly from interface jumps.
+
+For a given interface,
+
+```math
+J_u
+=
+u^{-}
+-
+u^{+}
+```
+
+and
+
+```math
+J_q
+=
+q^{-}
+-
+q^{+}
+```
+
+are computed, where
+
+```math
+q = h u_x.
+```
+
+These jumps define a small reconstruction system whose solution provides the amplitudes of the missing homogeneous modes.
+
+Implemented in:
+
+```text
+flux1d.py
+flux2d.py
+```
 
 ---
 
@@ -25,72 +174,285 @@ Two reconstruction strategies are included:
 
 ```text
 .
-├── overset1d.py
-├── validation1d_flux.py
-├── utils/
-│   ├── interface_correction_1d.py
-│   └── logger.py
+├── proofOfConcepts/
+│
+│   ├── overlapping1d.py
+│   ├── overlapping2d.py
+│   ├── overlapping2d_4dom.py
+│   │
+│   ├── flux1d.py
+│   └── flux2d.py
+│
+├── src/
+│
+│   ├── problems/
+│   │   ├── elliptic1d.py
+│   │   └── elliptic2d.py
+│   │
+│   ├── solver/
+│   │   ├── fem1d.py
+│   │   └── fem2d.py
+│   │
+│   ├── reconstruction/
+│   │   ├── overlap1d.py
+│   │   ├── overlap2d.py
+│   │   ├── flux.py
+│   │   └── flux_2d.py
+│   │
+│   ├── plotlib/
+│   │   ├── solution_plots.py
+│   │   ├── overlap_plots.py
+│   │   ├── validation_plots.py
+│   │   ├── solution_plots_2d.py
+│   │   ├── overlap_plots_2d.py
+│   │   └── validation_plots_2d.py
+│   │
+│   └── utils/
+│       ├── logger.py
+│       └── utils.py
+│
+├── test/
+│   ├── test_elliptic1d_validation.py
+│   ├── test_elliptic2d_validation.py
+│   ├── test_fem1d_validation.py
+│   └── test_fem2d_validation.py
+│
 ├── runs/
-└── pyproject.toml
+│
+├── requirements.txt
+│
+└── README.md
 ```
 
-Main scripts:
+---
 
-| File | Description |
-|--------|-------------|
-| `overset1d.py` | Solution-based reconstruction |
-| `validation1d_flux.py` | Flux-based reconstruction |
+# Main Numerical Studies
+
+All numerical experiments discussed in the thesis are located in
+
+```text
+proofOfConcepts/
+```
+
+---
+
+## overlapping1d.py
+
+One-dimensional overlap reconstruction validation.
+
+Features:
+
+- benchmark solution generation;
+- overlap observation construction;
+- homogeneous-mode reconstruction;
+- weighted overlap blending;
+- convergence studies;
+- overlap-width studies;
+- conditioning studies.
+
+Run:
+
+```bash
+python proofOfConcepts/overlapping1d.py
+```
+
+or
+
+```bash
+python -m proofOfConcepts.overlapping1d
+```
+
+---
+
+## overlapping2d.py
+
+Two-dimensional overlap reconstruction validation.
+
+Features:
+
+- two-dimensional overlap reconstruction;
+- observation-strategy comparison;
+- modal convergence;
+- overlap-width studies;
+- reconstruction diagnostics.
+
+Run:
+
+```bash
+python proofOfConcepts/overlapping2d.py
+```
+
+or
+
+```bash
+python -m proofOfConcepts.overlapping2d
+```
+
+---
+
+## overlapping2d_4dom.py
+
+Four-domain overlap reconstruction study.
+
+Features:
+
+- multiple overlapping domains;
+- multidirectional reconstruction;
+- multi-interface coupling;
+- complex overlap geometries.
+
+Run:
+
+```bash
+python proofOfConcepts/overlapping2d_4dom.py
+```
+
+or
+
+```bash
+python -m proofOfConcepts.overlapping2d_4dom
+```
+
+---
+
+## flux1d.py
+
+One-dimensional interface-flux reconstruction.
+
+Features:
+
+- interface jump reconstruction;
+- flux jump reconstruction;
+- homogeneous correction recovery;
+- conditioning studies;
+- interface diagnostics.
+
+Run:
+
+```bash
+python proofOfConcepts/flux1d.py
+```
+
+or
+
+```bash
+python -m proofOfConcepts.flux1d
+```
+
+---
+
+## flux2d.py
+
+Two-dimensional interface-flux reconstruction.
+
+Features:
+
+- modal flux reconstruction;
+- interface-jump projection;
+- analytical correction modes;
+- interface-continuity reconstruction.
+
+Run:
+
+```bash
+python proofOfConcepts/flux2d.py
+```
+
+or
+
+```bash
+python -m proofOfConcepts.flux2d
+```
+
+---
+
+# Validation Suite
+
+Validation scripts are located in
+
+```text
+test/
+```
+
+and verify the correctness of the model problems and finite-element discretizations.
+
+---
+
+## Elliptic Problem Validation
+
+```bash
+python test/test_elliptic1d_validation.py
+```
+
+```bash
+python test/test_elliptic2d_validation.py
+```
+
+These tests verify:
+
+- forcing functions;
+- analytical derivatives;
+- coefficient implementations;
+- consistency of the governing equations.
+
+---
+
+## Finite Element Validation
+
+```bash
+python test/test_fem1d_validation.py
+```
+
+```bash
+python test/test_fem2d_validation.py
+```
+
+These tests verify:
+
+- finite-element implementation;
+- convergence rates;
+- residual consistency;
+- benchmark solutions;
+- interpolation accuracy.
 
 ---
 
 # Requirements
 
-The project uses:
+The repository requires:
 
-- Python 3.11+
-- NumPy
-- SciPy
-- Matplotlib
-- Pandas
-- scikit-fem
-
-Recommended package manager:
-
-**uv**
-
----
-
-# Installing uv
-
-Linux/macOS:
-
-```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
-```
-
-Windows (PowerShell):
-
-```powershell
-powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
-```
-
-Verify installation:
-
-```bash
-uv --version
+```text
+Python 3.11+
+NumPy
+SciPy
+Matplotlib
+Pandas
+scikit-fem
 ```
 
 ---
 
-# Create Environment
+# Installation
 
-From the repository root:
+Clone the repository:
 
 ```bash
-uv venv
+git clone <repository-url>
 ```
 
-Activate:
+Enter the repository:
+
+```bash
+cd overset_grid
+```
+
+Create a virtual environment:
+
+```bash
+python -m venv .venv
+```
+
+Activate it.
 
 Linux/macOS:
 
@@ -104,219 +466,216 @@ Windows:
 .venv\Scripts\activate
 ```
 
----
-
-# Install Dependencies
-
-If a `pyproject.toml` is available:
+Install dependencies:
 
 ```bash
-uv sync
-```
-
-Otherwise:
-
-```bash
-uv pip install \
-numpy \
-scipy \
-matplotlib \
-pandas \
-scikit-fem
-```
-
----
-
-# Running the Solution-Based Reconstruction
-
-Run:
-
-```bash
-python overset1d.py
+pip install numpy scipy matplotlib pandas scikit-fem
 ```
 
 or
 
 ```bash
-uv run python overset1d.py
+pip install -r requirements.txt
 ```
-
-The script:
-
-1. Computes a reference solution on the full domain.
-2. Splits the domain into two subdomains.
-3. Perturbs the interface boundary condition.
-4. Solves each subdomain independently.
-5. Reconstructs the missing homogeneous component.
-6. Compares the reconstructed solution with the reference solution.
 
 ---
 
-# Running the Flux-Based Reconstruction
+# Running a Study
 
-Run:
+Example:
 
 ```bash
-python validation1d_flux.py
+python proofOfConcepts/overlapping1d.py
 ```
 
 or
 
 ```bash
-uv run python validation1d_flux.py
+python proofOfConcepts/flux1d.py
 ```
 
-The script:
-
-1. Computes the interface solution jump
-
-```math
-J_u = u_A(x_I)-u_B(x_I)
-```
-
-2. Computes the interface flux jump
-
-```math
-J_q = q_A-q_B
-```
-
-3. Constructs unit homogeneous responses.
-
-4. Solves the interface system
-
-```math
-\begin{bmatrix}
-1 & -1 \\
-q_{\phi A} & -q_{\phi B}
-\end{bmatrix}
-\begin{bmatrix}
-\varepsilon_A \\
-\varepsilon_B
-\end{bmatrix}
-=
-\begin{bmatrix}
-J_u\\
-J_q
-\end{bmatrix}
-```
-
-5. Applies the correction.
+The scripts automatically create a timestamped output directory and generate all associated diagnostics and plots.
 
 ---
 
-# Output
+# Output Structure
 
-Each run generates a timestamped directory:
+Each execution creates a dedicated run directory:
 
 ```text
 runs/
-└── run_YYYYMMDD_HHMMSS/
+└── overlap1d_YYYYMMDD_HHMMSS/
 ```
 
-containing:
+or
 
 ```text
-results.csv
+runs/
+└── flux1d_YYYYMMDD_HHMMSS/
+```
+
+depending on the experiment.
+
+Typical contents include:
+
+```text
 run.log
+
+results.csv
+
+convergence.csv
+
+overlap_study.csv
+
 solution_with_error.png
-exponential_fit_comparison.png
+
+overlap_detail.png
+
+homogeneous_correction.png
+
+reconstruction_residual.png
+
+modal_observation_convergence.png
+
+overlap_width_error.png
+
+condition_vs_h.png
 ```
 
-For the flux method:
+The exact set of figures depends on the script being executed.
+
+---
+
+# Main Components
+
+## problems
+
+Contains mathematical model definitions:
 
 ```text
-solution_with_error_flux.png
-exponential_fit_comparison_flux.png
+elliptic1d.py
+elliptic2d.py
 ```
 
 ---
 
-# Key Parameters
+## solver
 
-The main parameters are located near the beginning of each script.
+Finite-element solvers:
 
-```python
-xI = 64
+```text
+fem1d.py
+fem2d.py
 ```
-
-Artificial interface location.
-
-```python
-n_left = 400
-n_right = 400
-```
-
-Subdomain resolutions.
-
-```python
-noise_amplitude = 6.4
-```
-
-Magnitude of interface perturbation.
-
-```python
-k_reaction = 25.0
-```
-
-Reaction coefficient.
 
 ---
 
-# Solution-Based Reconstruction Modes
+## reconstruction
 
-Single mode:
+Implementation of overlap and flux reconstruction methods:
 
-```python
-nmodes = 1
-single_amplitude = False
+```text
+overlap1d.py
+overlap2d.py
+
+flux.py
+flux_2d.py
 ```
-
-Multiple independent modes:
-
-```python
-nmodes = 3
-single_amplitude = False
-```
-
-Multiple modes with one amplitude:
-
-```python
-nmodes = 3
-single_amplitude = True
-```
-
-Recommended observation-point spacing:
-
-```python
-2*dx
-```
-
-between neighboring observation points.
-
-Observation points placed too far from the interface tend to contain stronger contributions from the particular solution, leading to poorer modal reconstruction.
 
 ---
 
-# Typical Results
+## plotlib
 
-Constant coefficients:
-
-```text
-L2 before correction ≈ 1.38e+01
-L2 after correction  ≈ 4.40e−03
-```
-
-Variable coefficients:
+Publication-quality visualization routines:
 
 ```text
-L2 before correction ≈ 1.31e+01
-L2 after correction  ≈ 2.27e−01
-```
+solution_plots.py
+overlap_plots.py
+validation_plots.py
 
-Three modes per side:
-
-```text
-L2 after correction ≈ 1.6e−01
+solution_plots_2d.py
+overlap_plots_2d.py
+validation_plots_2d.py
 ```
 
 ---
+
+## utils
+
+Utility routines:
+
+```text
+logger.py
+utils.py
+```
+
+---
+
+# Expected Results
+
+A successful reconstruction should satisfy
+
+```math
+\|u_{\mathrm{rec}}-u_{\mathrm{exact}}\|
+<
+\|u_{\mathrm{unc}}-u_{\mathrm{exact}}\|
+```
+
+demonstrating that the interface-induced homogeneous error has been identified and removed.
+
+Typical studies show substantial reductions in reconstruction error after application of the overlap or flux correction procedures.
+
+---
+
+# References
+
+The methodology draws upon ideas from
+
+- elliptic boundary-value problems;
+- homogeneous solution reconstruction;
+- domain decomposition methods;
+- overset grids;
+- finite-element methods;
+- the Variational Boussinesq Model.
+
+For detailed theoretical derivations, numerical analysis, and discussion, refer to the MSc thesis.
+
+---
+
+# Citation
+
+If you use this repository, please cite:
+
+```text
+Zambelli, L.
+
+Reconstruction Techniques for Elliptic Problems
+on Overlapping and Disjoint Domains.
+
+MSc Thesis / Research Report.
+
+University of Groningen.
+
+2026.
+```
+
+---
+
+# Author
+
+**Lorenzo Zambelli**
+
+MSc Applied Mathematics
+
+University of Groningen
+
+Research topic:
+
+```text
+Overlap Reconstruction
+Interface Error Reconstruction
+Domain Decomposition
+Overset Grids
+Finite Elements
+Variational Boussinesq Models
+```
