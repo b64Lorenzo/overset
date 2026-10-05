@@ -3,10 +3,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-
 from scipy.interpolate import LinearNDInterpolator
-
-
 from matplotlib.colors import TwoSlopeNorm
 
 
@@ -97,12 +94,7 @@ def plot_surface(
     plt.close()
 
 
-from scipy.interpolate import LinearNDInterpolator
-import numpy as np
 
-
-from scipy.interpolate import LinearNDInterpolator
-import numpy as np
 
 
 def build_global_interpolator(
